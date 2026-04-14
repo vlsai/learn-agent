@@ -1,22 +1,35 @@
 # 教学版代码说明
 
-这份代码不是照搬原仓库，而是为了培训演示重新写的教学版实现。
+这份代码只为一件事服务：
+
+> 用最小、最清楚、最方便演示的方式，讲清三种经典智能体范式。
+
+所有脚本都围绕同一个目标任务：
+
+> 生成一个单文件 `HTML + CSS + JavaScript` 贪吃蛇小游戏。
 
 ## 设计原则
 
-- 保留核心思想
-- 刻意减少工程噪声
-- 注释尽量写清楚“为什么这么做”
-- 默认用 OpenAI 兼容接口，方便接任何兼容服务
+- 不绑定课程章节
+- 不照抄现成工程源码
+- 只保留讲解范式真正需要的结构
+- 注释重点解释“为什么这样设计”
+- 默认使用 OpenAI 兼容接口
 
 ## 目录结构
 
 - `common/`
-  - 通用配置和 LLM 客户端
+  - 配置读取
+  - LLM 客户端
+  - 输出文件保存与代码提取
 - `paradigms/`
-  - 三种经典范式的教学版实现
-- `claude_code_s01_s06/`
-  - `learn-claude-code` 前 6 章的最小示例
+  - `react_demo.py`
+  - `plan_and_solve_demo.py`
+  - `reflection_demo.py`
+  - `demo_data.py`
+  - `tools.py`
+- `standalone/`
+  - `snake_reference.html`
 
 ## 启动前配置
 
@@ -40,12 +53,23 @@ LLM_MODEL=你的模型名
 pip install -r requirements.txt
 ```
 
-## 推荐先跑什么
+## 推荐讲解顺序
 
-如果你只想先确认环境可用，先跑：
+1. 先打开 `standalone/snake_reference.html`，让听众看到目标长什么样
+2. 再跑 `react_demo.py`，讲“边查边做”
+3. 再跑 `plan_and_solve_demo.py`，讲“先拆再做”
+4. 最后跑 `reflection_demo.py`，讲“先做再改”
+
+## 运行命令
 
 ```bash
 python paradigms/react_demo.py
+python paradigms/plan_and_solve_demo.py
+python paradigms/reflection_demo.py
 ```
 
-如果这个脚本能正常返回结果，说明 API 配置基本是通的。
+生成的文件会写到：
+
+```bash
+code/.task_outputs/
+```

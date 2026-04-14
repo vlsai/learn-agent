@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Demo Reference</title>
+  <style>
+    :root {
+      --bg: #10151d;
+      --panel: #161f2b;
+      --panel-border: #2b3848;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --snake: #22c55e;
+      --snake-head: #4ade80;
+      --food: #ef4444;
+      --accent: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 28%),
+        linear-gradient(160deg, #0b1017 0%, #10151d 50%, #0f1722 100%);
+      color: var(--text);
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      gap: 20px;
+      width: min(100%, 980px);
+    }
+
+    .board-panel,
+    .side-panel {
+      background: rgba(22, 31, 43, 0.95);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    }
+
+    .board-panel {
+      padding: 18px;
+    }
+
+    .side-panel {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0.04em;
+    }
+
+    .subtitle {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 540px;
+      display: block;
+      margin: 0 auto;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 35, 0.98), rgba(10, 15, 24, 0.98));
+      border: 1px solid #233042;
+      border-radius: 12px;
+    }
+
+    .metric {
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+    }
+
+    .metric-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .status {
+      min-height: 50px;
+      line-height: 1.6;
+      color: #dbeafe;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover {
+      filter: brightness(1.05);
+    }
+
+    .tips {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="board-panel">
+      <h1>贪吃蛇参考 Demo</h1>
+      <p class="subtitle">
+        这是一个完全独立的单文件示例，方便培训现场先展示目标结果，
+        也方便讲解前端小游戏最常见的状态与循环结构。
+      </p>
+      <canvas id="gameCanvas" width="540" height="540" aria-label="Snake game board"></canvas>
+    </section>
+
+    <aside class="side-panel">
+      <div class="metric">
+        <span class="metric-label">当前得分</span>
+        <strong class="metric-value" id="scoreValue">0</strong>
+      </div>
+
+      <div class="metric">
+        <span class="metric-label">当前状态</span>
+        <div class="status" id="statusText">按方向键开始游戏。</div>
+      </div>
+
+      <button id="restartButton" type="button">重新开始</button>
+
+      <ul class="tips">
+        <li>使用方向键控制蛇移动。</li>
+        <li>撞墙或撞到自己时游戏结束。</li>
+        <li>吃到食物会加分并让蛇变长。</li>
+      </ul>
+    </aside>
+  </main>
+
+  <script>
+    // 这里统一定义棋盘和速度参数，方便培训时解释：
+    // 贪吃蛇本质上不是在“像素级移动”，而是在“网格级移动”。
+    const GRID_SIZE = 18;
+    const CELL_SIZE = 30;
+    const TICK_MS = 120;
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreValue = document.getElementById("scoreValue");
+    const statusText = document.getElementById("statusText");
+    const restartButton = document.getElementById("restartButton");
+
+    let timerId = null;
+    let state = createInitialState();
+
+    function createInitialState() {
+      // 把“初始状态”收敛成一个函数，有两个明显好处：
+      // 1. 初始化逻辑集中，便于阅读
+      // 2. 重新开始时可以直接复用，不会遗漏字段
+      return {
+        snake: [
+          { x: 9, y: 9 },
+          { x: 8, y: 9 },
+          { x: 7, y: 9 }
+        ],
+        direction: { x: 1, y: 0 },
+        nextDirection: { x: 1, y: 0 },
+        food: { x: 13, y: 9 },
+        score: 0,
+        started: false,
+        gameOver: false
+      };
+    }
+
+    function resetGame() {
+      state = createInitialState();
+      updateInfo("按方向键开始游戏。");
+      stopLoop();
+      draw();
+    }
+
+    function startLoop() {
+      if (timerId !== null) {
+        return;
+      }
+      timerId = window.setInterval(step, TICK_MS);
+    }
+
+    function stopLoop() {
+      if (timerId !== null) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function updateInfo(message) {
+      scoreValue.textContent = String(state.score);
+      statusText.textContent = message;
+    }
+
+    function isOppositeDirection(next, current) {
+      // 这个判断用于阻止蛇立即反向，避免出现“自己撞自己”的异常体验。
+      return next.x + current.x === 0 && next.y + current.y === 0;
+    }
+
+    function placeFood() {
+      // 持续生成随机位置，直到找到一个没有被蛇占据的格子。
+      // 由于棋盘较大，这种简单做法在培训 demo 中已经足够直观。
+      let candidate = null;
+
+      do {
+        candidate = {
+          x: Math.floor(Math.random() * GRID_SIZE),
+          y: Math.floor(Math.random() * GRID_SIZE)
+        };
+      } while (
+        state.snake.some(segment => segment.x === candidate.x && segment.y === candidate.y)
+      );
+
+      state.food = candidate;
+    }
+
+    function handleDirectionInput(event) {
+      const directionMap = {
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 }
+      };
+
+      const requested = directionMap[event.key];
+      if (!requested) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isOppositeDirection(requested, state.direction)) {
+        return;
+      }
+
+      state.nextDirection = requested;
+
+      if (!state.started && !state.gameOver) {
+        state.started = true;
+        updateInfo("游戏进行中，继续吃食物。");
+        startLoop();
+      }
+    }
+
+    function step() {
+      if (state.gameOver) {
+        return;
+      }
+
+      // 先提交下一帧方向，再计算新的蛇头位置。
+      state.direction = state.nextDirection;
+      const head = state.snake[0];
+      const nextHead = {
+        x: head.x + state.direction.x,
+        y: head.y + state.direction.y
+      };
+
+      const willEatFood = nextHead.x === state.food.x && nextHead.y === state.food.y;
+
+      if (hasWallCollision(nextHead) || hasSelfCollision(nextHead, willEatFood)) {
+        state.gameOver = true;
+        updateInfo("游戏结束，点击重新开始再来一局。");
+        stopLoop();
+        draw();
+        return;
+      }
+
+      state.snake.unshift(nextHead);
+
+      if (willEatFood) {
+        state.score += 1;
+        placeFood();
+        updateInfo("吃到食物了，继续保持。");
+      } else {
+        // 如果没有吃到食物，就移除尾巴，蛇的长度保持不变。
+        state.snake.pop();
+      }
+
+      draw();
+      updateInfo("游戏进行中，继续吃食物。");
+    }
+
+    function hasWallCollision(head) {
+      return (
+        head.x < 0 ||
+        head.y < 0 ||
+        head.x >= GRID_SIZE ||
+        head.y >= GRID_SIZE
+      );
+    }
+
+    function hasSelfCollision(head, willEatFood) {
+      // 如果这一步不会吃到食物，那么尾巴会在本轮移动后离开当前位置。
+      // 因此检测自撞时，应当忽略当前尾巴那一格，避免把合法移动误判成失败。
+      const bodyToCheck = willEatFood ? state.snake : state.snake.slice(0, -1);
+      return bodyToCheck.some(segment => segment.x === head.x && segment.y === head.y);
+    }
+
+    function drawBoardBackground() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 先画棋盘背景和细网格，这样页面会更像一个“真实游戏场景”。
+      ctx.fillStyle = "#0b1220";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+      ctx.lineWidth = 1;
+      for (let index = 0; index <= GRID_SIZE; index += 1) {
+        const position = index * CELL_SIZE;
+        ctx.beginPath();
+        ctx.moveTo(position, 0);
+        ctx.lineTo(position, canvas.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, position);
+        ctx.lineTo(canvas.width, position);
+        ctx.stroke();
+      }
+    }
+
+    function drawCell(x, y, color, radius = 6) {
+      const pixelX = x * CELL_SIZE;
+      const pixelY = y * CELL_SIZE;
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(pixelX + 2, pixelY + 2, CELL_SIZE - 4, CELL_SIZE - 4, radius);
+      ctx.fill();
+    }
+
+    function draw() {
+      drawBoardBackground();
+
+      // 先画食物，再画蛇，视觉上更清楚。
+      drawCell(state.food.x, state.food.y, "#ef4444", 10);
+
+      state.snake.forEach((segment, index) => {
+        const color = index === 0 ? "#4ade80" : "#22c55e";
+        drawCell(segment.x, segment.y, color, 8);
+      });
+    }
+
+    document.addEventListener("keydown", handleDirectionInput);
+    restartButton.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+</html>

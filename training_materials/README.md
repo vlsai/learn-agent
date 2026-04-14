@@ -1,47 +1,53 @@
 # 培训材料
 
-这份目录是为组内培训单独整理的教学材料，目标不是完整复刻原仓库，而是把核心概念重新组织成更适合讲解、演示和二次修改的版本。
+这份目录现在是一套纯 demo 版培训材料，不再绑定任何课程章节或原书结构。
+
+目标很简单：
+
+- 只讲三种经典智能体工作流
+- 只围绕一个统一任务展开
+- 只保留方便现场演示和二次修改的最小代码
+
+统一任务是：
+
+> 生成一个单文件 `HTML + CSS + JavaScript` 贪吃蛇小游戏。
+
+这样做的好处是：
+
+- 任务背景足够轻
+- 范式差异更容易横向对比
+- 结果是否可用可以立刻验证
 
 ## 目录结构
 
 - `markdown/`
-  - 培训讲义、学习地图、现场演示脚本
+  - `01_overview.md`：培训总览
+  - `02_agent_paradigms.md`：三种范式讲解
+  - `03_demo_walkthrough.md`：现场演示脚本
 - `code/`
-  - 可直接运行的教学版示例代码
-  - 包含三种经典智能体构建方式
-  - 包含 `learn-claude-code` 前 6 章的最小示例代码
+  - `common/`：配置、LLM 客户端、输出工具
+  - `paradigms/`：三种范式的教学版实现
+  - `standalone/`：可直接打开运行的参考版贪吃蛇网页
 
 ## 建议讲解顺序
 
 1. 先讲 `markdown/01_overview.md`
 2. 再讲 `markdown/02_agent_paradigms.md`
-3. 然后讲 `markdown/03_learn_claude_code_s01_s06.md`
-4. 最后按 `markdown/04_demo_walkthrough.md` 现场跑代码
+3. 最后按 `markdown/03_demo_walkthrough.md` 现场跑代码
 
 ## 代码特点
 
-- 不是照抄原仓库源码
-- 结构刻意简化，方便现场讲解
-- 注释非常详细，适合边看边讲
-- 只需要配置 `API Base URL`、`API Key` 和 `Model` 即可启动需要大模型的 demo
+- 不照抄任何课程源码
+- 不依赖课程上下文
+- 注释偏讲解型，强调“为什么这样设计”
+- 只需要配置 `API Base URL`、`API Key`、`Model` 即可运行
+- 同时提供一个不依赖 API 的参考版网页
 
 ## 快速开始
 
-进入代码目录：
-
 ```bash
 cd /Users/sailv/IdeaProjects/agentStudy/training_materials/code
-```
-
-复制环境变量模板：
-
-```bash
 cp .env.example .env
-```
-
-安装依赖：
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -53,13 +59,8 @@ python paradigms/plan_and_solve_demo.py
 python paradigms/reflection_demo.py
 ```
 
-运行 `learn-claude-code` 前 6 章最小示例：
+如果你想先看一个直接可运行的结果：
 
 ```bash
-python claude_code_s01_s06/s01_agent_loop_minimal.py
-python claude_code_s01_s06/s02_tool_dispatch_minimal.py
-python claude_code_s01_s06/s03_todo_manager_minimal.py
-python claude_code_s01_s06/s04_subagent_minimal.py
-python claude_code_s01_s06/s05_skill_loader_minimal.py
-python claude_code_s01_s06/s06_context_compact_minimal.py
+open standalone/snake_reference.html
 ```

@@ -1,19 +1,17 @@
 """教学版 ReAct Agent。
 
-这个脚本不是为了追求最强效果，而是为了把 ReAct 的骨架讲清楚：
+这个脚本只做一件事：
 
-1. 模型先思考
-2. 如果需要工具，就输出 Action
-3. 程序执行工具
-4. 把 Observation 回填给模型
-5. 继续下一轮直到得到 Final Answer
+> 用 ReAct 工作流生成一个单文件贪吃蛇网页。
 
-运行方式：
+这里刻意保留最传统的文本协议：
 
-```bash
-python paradigms/react_demo.py
-python paradigms/react_demo.py --question "learn claude code 前 6 章里哪一章首次引入子智能体？"
-```
+- `Thought`
+- `Action`
+- `Observation`
+- `Final Answer`
+
+因为这种写法最适合培训现场逐行讲解。
 """
 
 from __future__ import annotations
@@ -31,14 +29,13 @@ CODE_ROOT = Path(__file__).resolve().parents[1]
 if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
 
+from common.artifacts import extract_code_block, write_text_output
 from common.llm_client import build_default_client
+from paradigms.demo_data import SNAKE_TASK
 from paradigms.tools import render_tool_descriptions, run_tool
 
 
-DEFAULT_QUESTION = (
-    "learn claude code 前 6 章里哪一章首次引入子智能体？"
-    "同时说明上一章最核心解决的问题。"
-)
+DEFAULT_TASK = SNAKE_TASK
 
 
 class TeachingReActAgent:
@@ -58,7 +55,7 @@ class TeachingReActAgent:
     )
     FINAL_PATTERN = re.compile(r"Final Answer:\s*(?P<answer>.*)", re.DOTALL)
 
-    def __init__(self, max_steps: int = 4) -> None:
+    def __init__(self, max_steps: int = 5) -> None:
         self.llm = build_default_client()
         self.max_steps = max_steps
 
@@ -71,7 +68,7 @@ class TeachingReActAgent:
 
         return f"""
 你是一个教学版 ReAct Agent。
-你的目标不是一次性把答案全部说完，而是按 ReAct 方式工作。
+你的任务是交付一个可直接保存为 `.html` 文件的单文件贪吃蛇网页。
 
 可用工具如下：
 {render_tool_descriptions()}
@@ -89,10 +86,12 @@ Final Answer: 你的最终回答
 请注意：
 - 不要同时输出 Action 和 Final Answer
 - 工具输入不要再套引号
-- 优先使用本地知识库工具回答培训相关问题
+- 在给出 Final Answer 之前，至少调用一次工具
+- 最终答案必须包含一个 ```html 代码块
+- 代码必须是原生 HTML、CSS、JavaScript 的单文件实现
 """.strip()
 
-    def _build_user_prompt(self, question: str, scratchpad: str) -> str:
+    def _build_user_prompt(self, task: str, scratchpad: str) -> str:
         """构造 user prompt。
 
         `scratchpad` 是 ReAct 教学版里最关键的状态之一。
@@ -100,8 +99,8 @@ Final Answer: 你的最终回答
         """
 
         return f"""
-用户问题：
-{question}
+当前任务：
+{task}
 
 已有工作轨迹：
 {scratchpad if scratchpad else "暂无。请开始第一步思考。"}
@@ -133,10 +132,11 @@ Final Answer: 你的最终回答
             "模型输出既没有 Final Answer，也没有合法 Action，无法继续。"
         )
 
-    def run(self, question: str) -> str:
+    def run(self, task: str) -> str:
         """运行完整的 ReAct 主循环。"""
 
         scratchpad = ""
+        used_tool = False
 
         for step in range(1, self.max_steps + 1):
             print(f"\n===== ReAct Step {step} =====")
@@ -146,7 +146,7 @@ Final Answer: 你的最终回答
                     {"role": "system", "content": self._build_system_prompt()},
                     {
                         "role": "user",
-                        "content": self._build_user_prompt(question, scratchpad),
+                        "content": self._build_user_prompt(task, scratchpad),
                     },
                 ],
                 temperature=0.1,
@@ -155,18 +155,23 @@ Final Answer: 你的最终回答
 
             tool_name, payload = self._parse_response(response)
 
-            # 如果 tool_name 为 None，说明 payload 实际上就是最终答案。
             if tool_name is None:
+                if not used_tool:
+                    raise RuntimeError("模型没有先调用工具，ReAct demo 无法体现闭环。")
+
+                html_code = extract_code_block(payload, preferred_language="html")
+                output_path = write_text_output("react_snake.html", html_code)
+
                 print("\n===== Final Answer =====")
                 print(payload)
-                return payload
+                print(f"\nSaved to: {output_path}")
+                return html_code
 
             observation = run_tool(tool_name, payload)
+            used_tool = True
             print("\n----- Observation -----")
             print(observation)
 
-            # 这一步是 ReAct 真正形成闭环的关键。
-            # 如果不把 Observation 写回 scratchpad，下一轮模型就看不到真实世界反馈。
             scratchpad += (
                 f"{response}\n"
                 f"Observation: {observation}\n"
@@ -177,11 +182,11 @@ Final Answer: 你的最终回答
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="运行教学版 ReAct demo。")
-    parser.add_argument("--question", default=DEFAULT_QUESTION)
+    parser.add_argument("--task", default=DEFAULT_TASK)
     args = parser.parse_args()
 
     agent = TeachingReActAgent()
-    agent.run(args.question)
+    agent.run(args.task)
 
 
 if __name__ == "__main__":

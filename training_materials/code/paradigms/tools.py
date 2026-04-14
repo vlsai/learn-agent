@@ -1,22 +1,15 @@
 """教学版工具模块。
 
-真实 Agent 系统的工具层通常会更复杂：
+这个版本只保留两个工具：
 
-- 有 schema
-- 有权限控制
-- 有日志与监控
-- 有重试和错误分类
+1. `search_snake_notes`
+2. `calculator`
 
-但在培训版里，我们只保留两个最容易讲清楚的工具：
+原因是培训里最重要的是让听众看清：
 
-1. `search_notes`：搜索本地教学知识库
-2. `calculator`：做简单数学计算
-
-这样做的好处是：
-
-- 不依赖第三方搜索 API
-- 可以稳定复现 demo
-- 更容易把注意力放在“工作流”而不是“外部服务接入”
+- 模型为什么要调用工具
+- 工具结果怎么回到下一轮推理
+- 工具层可以有多简单，但闭环不能省
 """
 
 from __future__ import annotations
@@ -25,7 +18,7 @@ import ast
 from dataclasses import dataclass
 from typing import Callable
 
-from paradigms.demo_data import TRAINING_NOTES
+from paradigms.demo_data import SNAKE_NOTES
 
 
 @dataclass
@@ -37,36 +30,36 @@ class ToolSpec:
     handler: Callable[[str], str]
 
 
-def search_notes(query: str) -> str:
-    """在本地教学知识库中做一个非常简单的关键词搜索。
+def search_snake_notes(query: str) -> str:
+    """在本地资料库里查找与贪吃蛇任务相关的说明。
 
-    这里故意不用复杂检索算法，因为培训演示的核心不是“搜得最强”，
-    而是让听众看清楚：
+    这是一个非常轻量的关键词搜索。
+    它不是为了追求最强检索，而是为了让 ReAct demo 稳定地体现：
 
-    - Agent 决定调用工具
-    - 工具返回结果
-    - 返回结果被下一轮推理再次使用
+    - Agent 主动决定去查资料
+    - 工具返回结构化观察结果
+    - 下一轮推理会使用这些结果
     """
 
-    keywords = [word.strip().lower() for word in query.split() if word.strip()]
+    keywords = [item.strip().lower() for item in query.split() if item.strip()]
     if not keywords:
-        keywords = [query.lower()]
+        keywords = [query.strip().lower()]
 
-    scored_results: list[tuple[int, dict[str, str]]] = []
-    for note in TRAINING_NOTES:
+    scored_notes: list[tuple[int, dict[str, str]]] = []
+    for note in SNAKE_NOTES:
         haystack = f"{note['title']} {note['content']}".lower()
-        score = sum(1 for keyword in keywords if keyword in haystack)
+        score = sum(1 for keyword in keywords if keyword and keyword in haystack)
         if score > 0:
-            scored_results.append((score, note))
+            scored_notes.append((score, note))
 
-    scored_results.sort(key=lambda item: item[0], reverse=True)
-    top_notes = [note for _, note in scored_results[:3]]
+    scored_notes.sort(key=lambda item: item[0], reverse=True)
+    matched_notes = [note for _, note in scored_notes[:3]]
 
-    if not top_notes:
-        return "没有在本地培训知识库里找到相关内容。"
+    if not matched_notes:
+        return "本地资料库里没有找到匹配内容。"
 
     lines: list[str] = []
-    for index, note in enumerate(top_notes, start=1):
+    for index, note in enumerate(matched_notes, start=1):
         lines.append(f"[{index}] {note['title']}")
         lines.append(note["content"])
         lines.append("")
@@ -74,12 +67,11 @@ def search_notes(query: str) -> str:
 
 
 def calculator(expression: str) -> str:
-    """安全地计算一个非常简单的算术表达式。
+    """安全计算一个非常简单的算术表达式。
 
-    这里使用 `ast` 做白名单求值，而不是直接 `eval()`。
-    培训时可以顺便强调一个工程习惯：
-
-    > 即使是 demo，也尽量不要直接把任意字符串交给 `eval()`。
+    这个工具不是主角，但很适合拿来说明：
+    工具不一定非得是“联网搜索”或“文件系统操作”，
+    一个小到只做运算的能力，也可以成为 Agent 的外部动作。
     """
 
     allowed_nodes = (
@@ -109,11 +101,11 @@ def calculator(expression: str) -> str:
                 raise ValueError("只允许数字常量。")
             return float(node.value)
         if isinstance(node, ast.UnaryOp):
-            value = _eval(node.operand)
+            operand_value = _eval(node.operand)
             if isinstance(node.op, ast.USub):
-                return -value
+                return -operand_value
             if isinstance(node.op, ast.UAdd):
-                return value
+                return operand_value
             raise ValueError("不支持的单目运算符。")
         if isinstance(node, ast.BinOp):
             left = _eval(node.left)
@@ -142,26 +134,23 @@ def calculator(expression: str) -> str:
 
 
 TOOLS: dict[str, ToolSpec] = {
-    "search_notes": ToolSpec(
-        name="search_notes",
-        description=(
-            "搜索本地培训知识库。"
-            "适合查找三种智能体范式和 learn-claude-code 前 6 章的讲义信息。"
-        ),
-        handler=search_notes,
+    "search_snake_notes": ToolSpec(
+        name="search_snake_notes",
+        description="搜索本地贪吃蛇任务说明，适合补玩法、UI 和质量要求。",
+        handler=search_snake_notes,
     ),
     "calculator": ToolSpec(
         name="calculator",
-        description="计算简单算术表达式，比如 12 * (8 + 3) / 2。",
+        description="计算简单算术表达式，适合估算网格、像素尺寸和速度参数。",
         handler=calculator,
     ),
 }
 
 
 def render_tool_descriptions() -> str:
-    """把工具说明渲染成一段文本，方便直接塞进提示词。"""
+    """把工具说明渲染成 prompt 可直接使用的文本。"""
 
-    lines = []
+    lines: list[str] = []
     for tool in TOOLS.values():
         lines.append(f"- {tool.name}: {tool.description}")
     return "\n".join(lines)
@@ -170,11 +159,8 @@ def render_tool_descriptions() -> str:
 def run_tool(tool_name: str, tool_input: str) -> str:
     """按名称执行工具。
 
-    这就是教学版的 dispatch map。
-    它刚好和 `learn-claude-code` s02 的思想相呼应：
-
-    > 加工具，尽量不要改主循环；
-    > 只要把工具注册进映射表即可。
+    这种 dispatch map 写法非常适合教学：
+    增加工具时，不需要改 Agent 主循环，只要注册新 handler 即可。
     """
 
     tool = TOOLS.get(tool_name)

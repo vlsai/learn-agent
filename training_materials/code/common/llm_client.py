@@ -1,12 +1,8 @@
 """教学版 LLM 客户端。
 
-这个版本刻意做得很小，原因不是它已经“最好”，而是它更适合培训演示：
-
-- 只有一个类
-- 只有一个最常用的 `chat()` 方法
-- 输出和异常处理尽量直白
-
-等听众理解完主干结构后，再扩展流式输出、重试、日志、监控、缓存都更自然。
+这里刻意只保留一个最常用的 `chat()` 接口，
+让培训时的注意力尽量停留在“工作流怎么设计”，
+而不是被 SDK 细节打散。
 """
 
 from __future__ import annotations
@@ -37,8 +33,9 @@ class TeachingLLMClient:
     ) -> str:
         """向模型发送一轮对话，并返回纯文本结果。
 
-        这里使用 `chat.completions` 而不是更复杂的工具调用协议，
-        是为了让培训中可以把注意力放在“工作流设计”而不是 SDK 细节上。
+        这里使用最直白的聊天接口。
+        这样范式 demo 可以把“工具调用、规划、反思”的控制权留在 Python 代码里，
+        更适合教学时逐步拆开讲。
         """
 
         response = self.client.chat.completions.create(
@@ -52,14 +49,7 @@ class TeachingLLMClient:
 
 
 def build_default_client() -> TeachingLLMClient:
-    """构造一个使用默认环境变量的客户端。
-
-    这样各个 demo 文件只要一行代码就能拿到可用客户端：
-
-    ```python
-    llm = build_default_client()
-    ```
-    """
+    """构造一个读取默认环境变量的客户端。"""
 
     config = AppConfig.from_env()
     return TeachingLLMClient(config)

@@ -1,23 +1,17 @@
 """教学版 Reflection Agent。
 
-这个脚本演示的重点不是“写出世界上最强的代码”，
-而是让听众看清 Reflection 的基本节奏：
+这个脚本把 Reflection 范式压缩成最容易看懂的三段：
 
-1. 先生成第一版
-2. 再生成批评意见
-3. 再根据批评意见重写
+1. 先生成第一版贪吃蛇网页
+2. 再做严格评审
+3. 再根据反馈重写
 
-运行方式：
-
-```bash
-python paradigms/reflection_demo.py
-```
+它非常适合讲“为什么多花一轮模型调用，结果可能会更稳”。
 """
 
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
@@ -26,13 +20,12 @@ CODE_ROOT = Path(__file__).resolve().parents[1]
 if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
 
+from common.artifacts import extract_code_block, write_text_output
 from common.llm_client import build_default_client
+from paradigms.demo_data import SNAKE_TASK
 
 
-DEFAULT_TASK = (
-    "编写一个 Python 函数，返回 1 到 n 之间所有素数组成的列表。"
-    "代码要适合培训讲解：结构清晰、边界条件明确、注释详细。"
-)
+DEFAULT_TASK = SNAKE_TASK
 
 
 class Memory:
@@ -58,51 +51,38 @@ class Memory:
 class ReflectionAgent:
     """教学版 Reflection Agent。"""
 
-    CODE_BLOCK_PATTERN = re.compile(r"```(?:python)?\n(.*?)```", re.DOTALL)
-
     def __init__(self, max_iterations: int = 2) -> None:
         self.llm = build_default_client()
         self.memory = Memory()
         self.max_iterations = max_iterations
 
-    def _extract_code(self, text: str) -> str:
-        """尽量从模型输出中提取代码块。
-
-        如果模型没有老老实实给 Markdown 代码块，
-        就退而求其次直接返回原文。
-        """
-
-        match = self.CODE_BLOCK_PATTERN.search(text)
-        if match:
-            return match.group(1).strip()
-        return text.strip()
-
     def _initial_draft(self, task: str) -> str:
         prompt = f"""
-你是一名适合做培训讲解的 Python 工程师。
-请完成下面的任务，并且只输出代码：
+你是一名适合做培训讲解的前端工程师。
+请完成下面的任务，并且只输出最终代码：
 
 任务：
 {task}
 
 要求：
-- 包含函数签名
-- 处理边界条件
+- 输出一个单文件 HTML
+- 内嵌 CSS 和 JavaScript
 - 注释足够详细，方便课堂讲解
 """.strip()
 
         raw = self.llm.chat([{"role": "user", "content": prompt}], temperature=0.2)
-        return self._extract_code(raw)
+        return extract_code_block(raw, preferred_language="html")
 
     def _reflect(self, task: str, code: str) -> str:
         prompt = f"""
-你是一位非常严格的代码评审员。
-请只从下面四个角度审查代码：
+你是一位非常严格的前端代码评审员。
+请只从下面五个角度审查代码：
 
-1. 讲解是否清晰
-2. 边界条件是否完整
-3. 算法是否足够适合教学
-4. 注释是否真的帮助理解
+1. 玩法是否完整
+2. 碰撞和重开逻辑是否可靠
+3. 页面是否适合培训展示
+4. 代码结构是否容易讲解
+5. 注释是否真的帮助理解
 
 如果你认为已经足够好，请明确输出：无需继续改进
 
@@ -110,7 +90,7 @@ class ReflectionAgent:
 {task}
 
 待审查代码：
-```python
+```html
 {code}
 ```
 """.strip()
@@ -119,14 +99,14 @@ class ReflectionAgent:
 
     def _refine(self, task: str, code: str, feedback: str) -> str:
         prompt = f"""
-你是一名 Python 工程师。
+你是一名前端工程师。
 请根据下面的评审意见重写代码，并且只输出最终代码。
 
 原始任务：
 {task}
 
 当前代码：
-```python
+```html
 {code}
 ```
 
@@ -135,7 +115,7 @@ class ReflectionAgent:
 """.strip()
 
         raw = self.llm.chat([{"role": "user", "content": prompt}], temperature=0.2)
-        return self._extract_code(raw)
+        return extract_code_block(raw, preferred_language="html")
 
     def run(self, task: str) -> str:
         print("===== Initial Draft =====")
@@ -151,8 +131,10 @@ class ReflectionAgent:
             print(feedback)
 
             if "无需继续改进" in feedback:
+                output_path = write_text_output("reflection_snake.html", latest_code)
                 print("\n===== Final Code =====")
                 print(latest_code)
+                print(f"\nSaved to: {output_path}")
                 return latest_code
 
             print("\n===== Refined Draft =====")
@@ -161,8 +143,10 @@ class ReflectionAgent:
             print(refined)
 
         final_code = self.memory.last_execution()
+        output_path = write_text_output("reflection_snake.html", final_code)
         print("\n===== Final Code =====")
         print(final_code)
+        print(f"\nSaved to: {output_path}")
         return final_code
 
 
